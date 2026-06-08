@@ -6,20 +6,41 @@ from groq import Groq
 # Load .env file if it exists
 load_dotenv()
 
-# Gemini Configurations
+# 1. Gemini Configurations
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+EMBEDDING_MODEL_NAME = "models/text-embedding-004"
+
+# 2. Groq Configurations
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_CHAT_MODEL_NAME = "llama-3.3-70b-versatile"
+
+# 3. Fallback parser: If running on cloud and keys are missing, load from .env.example
+if not GROQ_API_KEY or not GEMINI_API_KEY:
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    example_path = os.path.join(base_dir, ".env.example")
+    if os.path.exists(example_path):
+        try:
+            with open(example_path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line_stripped = line.strip()
+                    if "=" in line_stripped and not line_stripped.startswith("#"):
+                        k, v = line_stripped.split("=", 1)
+                        k = k.strip()
+                        v = v.strip()
+                        if k == "GROQ_API_KEY" and not GROQ_API_KEY:
+                            GROQ_API_KEY = v
+                        elif k == "GEMINI_API_KEY" and not GEMINI_API_KEY:
+                            GEMINI_API_KEY = v
+        except Exception:
+            pass
+
+# Configure Gemini if key was successfully resolved
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-
-EMBEDDING_MODEL_NAME = "models/text-embedding-004"
 
 def get_api_key():
     """Returns Gemini API key if configured."""
     return GEMINI_API_KEY
-
-# Groq Configurations
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_CHAT_MODEL_NAME = "llama-3.3-70b-versatile"
 
 def get_groq_client() -> Groq:
     """
