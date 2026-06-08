@@ -8,21 +8,32 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
+def clean_key(key: str) -> str:
+    """Helper to clean key string and decode base64 if present."""
+    if not key:
+        return ""
+    key_stripped = key.strip()
+    if key_stripped.startswith("base64:"):
+        import base64
+        try:
+            return base64.b64decode(key_stripped[7:]).decode("utf-8").strip()
+        except Exception:
+            pass
+    return key_stripped
+
 def is_valid_key(key: str) -> bool:
     """Helper to verify if a key is a real key or just a placeholder."""
-    if not key:
-        return False
-    key_stripped = key.strip()
-    if not key_stripped or "your_" in key_stripped.lower() or "placeholder" in key_stripped.lower():
+    cleaned = clean_key(key)
+    if not cleaned or "your_" in cleaned.lower() or "placeholder" in cleaned.lower():
         return False
     return True
 
 # 1. Gemini Configurations
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+GEMINI_API_KEY = clean_key(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
 
 # 2. Groq Configurations
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = clean_key(os.getenv("GROQ_API_KEY"))
 GROQ_CHAT_MODEL_NAME = "llama-3.3-70b-versatile"
 
 # 3. Fallback parser: If running on cloud and keys are missing/invalid, check .env.example
@@ -36,7 +47,7 @@ if not is_valid_key(GROQ_API_KEY) or not is_valid_key(GEMINI_API_KEY):
                     if "=" in line_stripped and not line_stripped.startswith("#"):
                         k, v = line_stripped.split("=", 1)
                         k = k.strip()
-                        v = v.strip()
+                        v = clean_key(v.strip())
                         if k == "GROQ_API_KEY" and not is_valid_key(GROQ_API_KEY):
                             GROQ_API_KEY = v
                         elif k == "GEMINI_API_KEY" and not is_valid_key(GEMINI_API_KEY):
