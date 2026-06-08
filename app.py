@@ -44,8 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. Cache Orchestrator resource
-@st.cache_resource
+# 2. Initialize Orchestrator
 def load_orchestrator():
     return Orchestrator(vector_store_path="vector_store.json")
 
