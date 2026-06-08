@@ -1,0 +1,15 @@
+# Local secrets
+.env
+.streamlit/secrets.toml
+
+# Vector memory database
+vector_store.json
+
+# Local temp upload folders
+uploaded_files/
+agent/uploaded_files/
+
+# Python compiled cache
+__pycache__/
+*.pyc
+.pytest_cache/
