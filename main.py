@@ -2,8 +2,9 @@ import sys
 import os
 from dotenv import load_dotenv
 
-# Load variables before any imports that depend on config
-load_dotenv()
+# Load variables before any imports that depend on config using absolute path
+base_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
 
 from prompt_toolkit import prompt
 from prompt_toolkit.key_binding import KeyBindings

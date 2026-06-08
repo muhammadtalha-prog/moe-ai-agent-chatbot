@@ -10,8 +10,9 @@ if "GROQ_API_KEY" in st.secrets:
 if "GEMINI_API_KEY" in st.secrets:
     os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# Load dotenv fallback
-load_dotenv()
+# Load dotenv fallback using absolute path
+base_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
 
 from agent.config import get_groq_key, get_api_key, GROQ_CHAT_MODEL_NAME
 from agent.experts.orchestrator import Orchestrator
