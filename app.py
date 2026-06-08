@@ -75,6 +75,10 @@ with st.sidebar:
     else:
         st.error("🔴 Groq API: Disconnected")
         st.warning("Please configure GROQ_API_KEY in secrets or .env file.")
+        if st.secrets:
+            st.info(f"Loaded Secrets: {list(st.secrets.keys())}")
+        else:
+            st.info("No Streamlit Secrets loaded.")
         
     if gemini_active:
         st.success("🟢 Gemini API: Connected (Embeddings)")
