@@ -1,21 +1,47 @@
 import json
 import re
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from agent.config import get_groq_client, get_groq_key, GROQ_CHAT_MODEL_NAME
-from agent.memory import VectorStore
+from agent.memory import VectorMemory
 from agent.mcp import mcp_registry
-from agent.experts.chat_expert import ChatExpert
-from agent.experts.file_expert import FileExpert
-from agent.experts.memory_expert import MemoryExpert
+
 
 class Orchestrator:
-    def __init__(self, vector_store_path: str = "vector_store.json"):
-        self.memory = VectorStore(vector_store_path)
-        self.chat_expert = ChatExpert()
-        self.file_expert = FileExpert()
-        self.memory_expert = MemoryExpert()
-        
+    def __init__(self, vector_store_path: str = "vector_store.json") -> None:
+        self.vector_store_path: str = vector_store_path
+        self._memory: Optional[VectorMemory] = None
+        self._chat_expert: Optional[Any] = None
+        self._file_expert: Optional[Any] = None
+        self._memory_expert: Optional[Any] = None
+
+    @property
+    def memory(self) -> VectorMemory:
+        if self._memory is None:
+            self._memory = VectorMemory(self.vector_store_path)
+        return self._memory
+
+    @property
+    def chat_expert(self) -> Any:
+        if self._chat_expert is None:
+            from agent.experts.chat_expert import ChatExpert
+            self._chat_expert = ChatExpert()
+        return self._chat_expert
+
+    @property
+    def file_expert(self) -> Any:
+        if self._file_expert is None:
+            from agent.experts.file_expert import FileExpert
+            self._file_expert = FileExpert()
+        return self._file_expert
+
+    @property
+    def memory_expert(self) -> Any:
+        if self._memory_expert is None:
+            from agent.experts.memory_expert import MemoryExpert
+            self._memory_expert = MemoryExpert()
+        return self._memory_expert
+
     def route_and_process(self, user_input: str, history: List[Dict[str, str]]) -> str:
         """
         Main entry point for routing a user query.

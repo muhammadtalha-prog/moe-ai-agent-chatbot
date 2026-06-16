@@ -1,6 +1,7 @@
 import sys
 import os
 from dotenv import load_dotenv
+from typing import List, Dict
 
 # Load variables before any imports that depend on config using absolute path
 base_dir = os.path.dirname(os.path.abspath(__file__))

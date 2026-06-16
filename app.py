@@ -45,17 +45,69 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 2. Initialize Orchestrator
-def load_orchestrator():
-    return Orchestrator(vector_store_path="vector_store.json")
+def initialize_embedding_cache():
+    cache_path = Path("embedding_cache.json")
+    if cache_path.exists():
+        # Check if cache is compatible
+        import json
+        try:
+            with open(cache_path, 'r') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            cache_path.unlink(missing_ok=True)
+            return
 
-orchestrator = load_orchestrator()
+        try:
+            if data:
+                sample_key = next(iter(data.keys()))
+                sample_embedding = data[sample_key]
+                
+                # Check validation
+                is_valid = False
+                if sample_embedding and len(sample_embedding) == 768:
+                    import math
+                    norm = math.sqrt(sum(x * x for x in sample_embedding))
+                    is_gemini = (0.99 <= norm <= 1.01)
+                    
+                    from agent.config import get_api_key
+                    if get_api_key():
+                        is_valid = is_gemini
+                    else:
+                        is_valid = not is_gemini
+                        
+                if not is_valid:
+                    # Incompatible, delete cache
+                    cache_path.unlink()
+                    import logging
+                    logging.getLogger("app").info("Deleted incompatible embedding cache")
+        except Exception:
+            pass
+
+@st.cache_resource
+def get_orchestrator():
+    """Cache orchestrator across reruns"""
+    initialize_embedding_cache()
+    orchestrator = Orchestrator(vector_store_path="vector_store.json")
+    # Check and rebuild if needed
+    orchestrator.memory.check_and_rebuild_store()
+    return orchestrator
+
+orchestrator = get_orchestrator()
 
 # Initialize session states
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
-    # Separate history structure matching orchestrator expectations
     st.session_state.chat_history = []
+if "max_history" not in st.session_state:
+    st.session_state.max_history = 50
+
+def trim_history():
+    """Trim session state chat history to prevent memory leaks."""
+    if len(st.session_state.chat_history) > st.session_state.max_history:
+        st.session_state.chat_history = st.session_state.chat_history[-st.session_state.max_history:]
+    if len(st.session_state.messages) > st.session_state.max_history:
+        st.session_state.messages = st.session_state.messages[-st.session_state.max_history:]
 
 # --- SIDEBAR PANELS ---
 with st.sidebar:
@@ -76,7 +128,7 @@ with st.sidebar:
         st.error("🔴 Groq API: Disconnected")
         st.warning("Please configure GROQ_API_KEY in secrets or .env file.")
         if st.secrets:
-            st.info(f"Loaded Secrets: {list(st.secrets.keys())}")
+            st.info("✅ Streamlit Secrets are loaded")
         else:
             st.info("No Streamlit Secrets loaded.")
         
@@ -97,14 +149,66 @@ with st.sidebar:
         if st.button("🗑️ Clear Vector DB", use_container_width=True):
             orchestrator.memory.clear()
             st.success("Vector DB wiped!")
-            st.rerun()
     with col2:
         if st.button("🧹 Clear Chat History", use_container_width=True):
             st.session_state.messages = []
             st.session_state.chat_history = []
             st.success("Chat cleared!")
-            st.rerun()
             
+    st.markdown("---")
+    
+    # System health check panel
+    st.subheader("⚙️ System Status")
+    
+    def check_health():
+        """Check all system components"""
+        status = {
+            "status": "healthy",
+            "components": {}
+        }
+        
+        # Check API keys
+        status["components"]["groq"] = "connected" if get_groq_key() else "missing"
+        status["components"]["gemini"] = "connected" if get_api_key() else "missing"
+        
+        # Check vector store
+        try:
+            status["components"]["vector_store"] = {
+                "status": "accessible",
+                "records": len(orchestrator.memory.documents),
+                "version": orchestrator.memory.embedding_version
+            }
+        except Exception as e:
+            status["components"]["vector_store"] = {
+                "status": f"corrupted or missing ({e})"
+            }
+            status["status"] = "degraded"
+        
+        # Check workspace directories
+        try:
+            workspace = get_workspace_dir()
+            temp_dir = workspace / "uploaded_files"
+            status["components"]["workspace"] = {
+                "status": "accessible",
+                "path": str(workspace),
+                "uploads_exist": temp_dir.exists()
+            }
+        except Exception as e:
+            status["components"]["workspace"] = {
+                "status": f"inaccessible ({e})"
+            }
+            status["status"] = "degraded"
+            
+        return status
+
+    if st.button("🔍 Run System Health Check", use_container_width=True):
+        health = check_health()
+        if health["status"] == "healthy":
+            st.success("System Status: HEALTHY")
+        else:
+            st.warning("System Status: DEGRADED")
+        st.json(health)
+
     st.markdown("---")
     st.markdown("Created by Antigravity AI Agent Chatbot.")
 
@@ -123,9 +227,13 @@ with tab1:
 
     # Chat input box
     if user_query := st.chat_input("Ask the agent a question or give an instruction..."):
+        from agent.security import sanitize_user_input
+        user_query = sanitize_user_input(user_query)
+        
         # Append User Input
         st.session_state.messages.append({"role": "user", "content": user_query})
         st.session_state.chat_history.append({"role": "user", "content": user_query})
+        trim_history()
         
         # Display User Input
         with st.chat_message("user"):
@@ -141,8 +249,10 @@ with tab1:
                     # Store response
                     st.session_state.messages.append({"role": "assistant", "content": response})
                     st.session_state.chat_history.append({"role": "assistant", "content": response})
-                    st.rerun()
+                    trim_history()
                 except Exception as e:
+                    from agent.security import SafeLogger
+                    SafeLogger.log_error(e, "Error executing chat query")
                     st.error(f"Error executing chat: {e}")
 
 # Tab 2: File upload processing
@@ -154,23 +264,33 @@ with tab2:
         "Choose a file to analyze"
     )
     
+    validated_file = False
     if uploaded_file is not None:
-        filename = uploaded_file.name
-        file_bytes = uploaded_file.read()
-        
-        # Safe storage in the workspace folder
-        workspace = get_workspace_dir()
-        temp_dir = workspace / "uploaded_files"
-        temp_dir.mkdir(exist_ok=True)
-        
-        target_path = temp_dir / filename
-        
-        # Write bytes safely to disk
-        with open(target_path, "wb") as f:
-            f.write(file_bytes)
+        try:
+            from agent.security import validate_and_secure_file
+            filename, file_bytes = validate_and_secure_file(uploaded_file)
             
-        st.success(f"Uploaded and secured file: `{filename}`")
-        
+            # Safe storage in the workspace folder
+            workspace = get_workspace_dir()
+            temp_dir = workspace / "uploaded_files"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Resolve target path and verify traversal safety
+            from agent.security import get_safe_path
+            target_path = get_safe_path(temp_dir / filename, workspace)
+            
+            # Write bytes safely to disk
+            with open(target_path, "wb") as f:
+                f.write(file_bytes)
+                
+            st.success(f"Uploaded and secured file: `{filename}`")
+            validated_file = True
+        except Exception as e:
+            from agent.security import SafeLogger
+            SafeLogger.log_error(e, "File upload security validation failed")
+            st.error(f"File validation error: {e}")
+            
+    if uploaded_file is not None and validated_file:
         # Set panel choices
         action = st.radio(
             "Select action to perform:",

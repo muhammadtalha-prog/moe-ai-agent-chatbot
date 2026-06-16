@@ -9,7 +9,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.security import is_safe_path, get_safe_path, get_workspace_dir
-from agent.memory import VectorStore
+from agent.memory import VectorStore, VectorMemory
 from agent.file_handler import read_file, write_file
 from agent.mcp import mcp_registry
 from agent.experts.orchestrator import Orchestrator
@@ -28,7 +28,7 @@ def test_security_paths(temp_workspace):
     unsafe_file = temp_workspace / "../../unsafe.txt"
     assert is_safe_path(unsafe_file, temp_workspace) == False
     
-    with pytest.raises(PermissionError):
+    with pytest.raises(ValueError):
         get_safe_path(unsafe_file, temp_workspace)
 
 def test_file_handler(temp_workspace):
@@ -104,6 +104,55 @@ def test_vector_store(temp_workspace):
     assert "id" in doc
     assert "text" in doc
 
+def test_vector_store_migration(temp_workspace):
+    db_file = str(temp_workspace / "legacy_vector_store.json")
+    
+    # Write a legacy list-format vector store file
+    legacy_data = [
+        {
+            "id": "legacy-1",
+            "text": "This is old legacy data",
+            "embedding": [0.1] * 768,
+            "metadata": {"topic": "legacy"}
+        }
+    ]
+    with open(db_file, 'w', encoding='utf-8') as f:
+        json.dump(legacy_data, f)
+        
+    # Initialize store - should auto-detect and migrate list format
+    store = VectorMemory(db_file)
+    assert len(store.documents) == 1
+    assert store.documents[0]["text"] == "This is old legacy data"
+    assert store.documents[0]["metadata"]["topic"] == "legacy"
+    assert store.documents[0]["metadata"]["embedding_version"] == store.embedding_version
+    
+    # Now simulate version mismatch by writing mismatched dict structure
+    mismatched_data = {
+        "_metadata": {
+            "embedding_version": "mismatched-v999"
+        },
+        "documents": [
+            {
+                "id": "legacy-2",
+                "text": "Mismatched version text",
+                "embedding": [0.2] * 768,
+                "metadata": {"topic": "mismatch"}
+            }
+        ]
+    }
+    with open(db_file, 'w', encoding='utf-8') as f:
+        json.dump(mismatched_data, f)
+        
+    store2 = VectorMemory(db_file)
+    assert len(store2.documents) == 1
+    assert store2.documents[0]["text"] == "Mismatched version text"
+    assert store2.documents[0]["metadata"]["topic"] == "mismatch"
+    assert store2.documents[0]["metadata"]["embedding_version"] == store2.embedding_version
+    
+    # Test checking and rebuilding store explicitly
+    store2.check_and_rebuild_store()
+    assert len(store2.documents) == 1
+
 def test_mcp_registry():
     # Verify pre-registered tools
     defs = mcp_registry.get_tool_definitions()
@@ -145,3 +194,70 @@ def test_orchestrator_routing():
     # Clean up test database if created
     if os.path.exists("temp_vector_store.json"):
         os.remove("temp_vector_store.json")
+
+class MockUploadedFile:
+    def __init__(self, name, content_bytes):
+        self.name = name
+        self.size = len(content_bytes)
+        self.content = content_bytes
+        
+    def getvalue(self):
+        return self.content
+
+def test_batch_embedding(temp_workspace):
+    db_file = str(temp_workspace / "batch_vector_store.json")
+    store = VectorStore(db_file)
+    
+    texts = ["Batch text A", "Batch text B", "Batch text C"]
+    metadatas = [{"tag": "A"}, {"tag": "B"}, {"tag": "C"}]
+    
+    doc_ids = store.add_documents_batch(texts, metadatas)
+    assert len(doc_ids) == 3
+    assert len(store.documents) == 3
+    assert store.documents[0]["text"] == "Batch text A"
+    assert store.documents[0]["metadata"]["tag"] == "A"
+    assert "embedding_version" in store.documents[0]["metadata"]
+
+def test_safe_logger(caplog):
+    import logging
+    from agent.security import SafeLogger
+    
+    err = ValueError("Failed connection with API key gsk_mockAPIKeyWhichIsFakeAndLongEnoughForTesting and AIzaSy123456789012345678901234567890123")
+    with caplog.at_level(logging.ERROR):
+        SafeLogger.log_error(err, "ContextInfo")
+    
+    assert len(caplog.records) > 0
+    logged_msg = caplog.records[-1].message
+    assert "ContextInfo" in logged_msg
+    assert "gsk_mockAPIKeyWhich" not in logged_msg
+    assert "AIzaSy" not in logged_msg
+    assert "[GROQ_API_KEY_REDACTED]" in logged_msg
+    assert "[GEMINI_API_KEY_REDACTED]" in logged_msg
+
+def test_file_upload_validation():
+    from agent.security import validate_and_secure_file
+    
+    # 1. Valid file
+    valid_file = MockUploadedFile("test.txt", b"Hello world text content.")
+    filename, content = validate_and_secure_file(valid_file)
+    assert filename == "test.txt"
+    assert content == b"Hello world text content."
+    
+    # 2. Too large file
+    large_file = MockUploadedFile("large.txt", b"A" * (11 * 1024 * 1024))
+    with pytest.raises(ValueError) as exc:
+        validate_and_secure_file(large_file)
+    assert "too large" in str(exc.value).lower()
+    
+    # 3. Path traversal
+    unsafe_file = MockUploadedFile("../../unsafe.txt", b"content")
+    with pytest.raises(ValueError) as exc:
+        validate_and_secure_file(unsafe_file)
+    assert "path traversal" in str(exc.value).lower()
+
+    # 4. Disallowed file type
+    disallowed_file = MockUploadedFile("malicious.exe", b"executable_binary_content")
+    with pytest.raises(ValueError) as exc:
+        validate_and_secure_file(disallowed_file)
+    assert "not allowed" in str(exc.value).lower() or "does not match" in str(exc.value).lower()
+

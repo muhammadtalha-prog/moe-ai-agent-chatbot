@@ -13,3 +13,6 @@ agent/uploaded_files/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Local cache
+embedding_cache.json
