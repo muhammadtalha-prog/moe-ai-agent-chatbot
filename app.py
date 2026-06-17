@@ -4,28 +4,88 @@ import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 1. Inject Streamlit Secrets into environment variables for Cloud Compatibility
-if "GROQ_API_KEY" in st.secrets:
-    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
-if "GEMINI_API_KEY" in st.secrets:
-    os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
-
-# Load dotenv fallback using absolute path
-base_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
-
-from agent.config import get_groq_key, get_api_key, GROQ_CHAT_MODEL_NAME
-from agent.experts.orchestrator import Orchestrator
-from agent.file_handler import read_file, write_file
-from agent.security import get_workspace_dir
-
-# Set premium Streamlit page configurations
+# Set page configurations first before any other Streamlit commands
 st.set_page_config(
     page_title="AI Agent Chatbot (MoE)",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Helper function to check if key is valid (not placeholder)
+def is_placeholder_key(key: str) -> bool:
+    if not key:
+        return True
+    key_stripped = key.strip()
+    return not key_stripped or "your_" in key_stripped.lower() or "placeholder" in key_stripped.lower()
+
+# Get initial defaults
+default_groq = st.session_state.get("custom_groq_key", os.getenv("GROQ_API_KEY", ""))
+default_gemini = st.session_state.get("custom_gemini_key", os.getenv("GEMINI_API_KEY", ""))
+
+if is_placeholder_key(default_groq):
+    default_groq = ""
+if is_placeholder_key(default_gemini):
+    default_gemini = ""
+
+# API Key Dynamic Inputs (rendered in sidebar but evaluated first)
+st.sidebar.subheader("🛠️ Configure API Keys")
+custom_groq = st.sidebar.text_input(
+    "Groq API Key (gsk_...)",
+    value=default_groq,
+    type="password",
+    help="Enter your Groq API Key. If left empty, the app will try to read GROQ_API_KEY from environment or secrets."
+)
+custom_gemini = st.sidebar.text_input(
+    "Gemini API Key (AIzaSy...)",
+    value=default_gemini,
+    type="password",
+    help="Enter your Gemini API Key. If left empty, the app will try to read GEMINI_API_KEY from environment or secrets."
+)
+
+# Apply inputs to environment dynamically
+if custom_groq:
+    os.environ["GROQ_API_KEY"] = custom_groq
+    st.session_state["custom_groq_key"] = custom_groq
+else:
+    if "GROQ_API_KEY" in os.environ:
+        del os.environ["GROQ_API_KEY"]
+    if "custom_groq_key" in st.session_state:
+        st.session_state.pop("custom_groq_key")
+        
+if custom_gemini:
+    os.environ["GEMINI_API_KEY"] = custom_gemini
+    st.session_state["custom_gemini_key"] = custom_gemini
+else:
+    if "GEMINI_API_KEY" in os.environ:
+        del os.environ["GEMINI_API_KEY"]
+    if "custom_gemini_key" in st.session_state:
+        st.session_state.pop("custom_gemini_key")
+
+# Inject Streamlit Secrets / dotenv fallback if custom key is not present
+if not os.environ.get("GROQ_API_KEY"):
+    if "GROQ_API_KEY" in st.secrets and not is_placeholder_key(st.secrets["GROQ_API_KEY"]):
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+if not os.environ.get("GEMINI_API_KEY"):
+    if "GEMINI_API_KEY" in st.secrets and not is_placeholder_key(st.secrets["GEMINI_API_KEY"]):
+        os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+
+# Load dotenv fallback using absolute path
+base_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
+
+# Check if environment keys are still placeholders and clear them if so
+if is_placeholder_key(os.environ.get("GROQ_API_KEY")):
+    if "GROQ_API_KEY" in os.environ:
+        del os.environ["GROQ_API_KEY"]
+if is_placeholder_key(os.environ.get("GEMINI_API_KEY")):
+    if "GEMINI_API_KEY" in os.environ:
+        del os.environ["GEMINI_API_KEY"]
+
+from agent.config import get_groq_key, get_api_key, GROQ_CHAT_MODEL_NAME
+from agent.experts.orchestrator import Orchestrator
+from agent.file_handler import read_file, write_file
+from agent.security import get_workspace_dir
 
 # Custom premium styling via markdown
 st.markdown("""
@@ -44,7 +104,60 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. Initialize Orchestrator
+# Verification Cache Helper
+def validate_groq_key(key: str) -> bool:
+    if not key:
+        return False
+    cache_key = f"val_groq_{key}"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+    try:
+        from groq import Groq
+        client = Groq(api_key=key)
+        client.models.list()
+        st.session_state[cache_key] = True
+        return True
+    except Exception:
+        st.session_state[cache_key] = False
+        return False
+
+def validate_gemini_key(key: str) -> bool:
+    if not key:
+        return False
+    cache_key = f"val_gemini_{key}"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=key)
+        genai.list_models()
+        st.session_state[cache_key] = True
+        return True
+    except Exception:
+        st.session_state[cache_key] = False
+        return False
+
+# Evaluate dynamic keys
+resolved_groq_key = get_groq_key()
+resolved_gemini_key = get_api_key()
+
+groq_valid = validate_groq_key(resolved_groq_key)
+gemini_valid = validate_gemini_key(resolved_gemini_key)
+
+# If any key is set but not valid, clear it from env so backend uses fallback mock mode
+if resolved_groq_key and not groq_valid:
+    if "GROQ_API_KEY" in os.environ:
+        del os.environ["GROQ_API_KEY"]
+    resolved_groq_key = None
+
+if resolved_gemini_key and not gemini_valid:
+    if "GEMINI_API_KEY" in os.environ:
+        del os.environ["GEMINI_API_KEY"]
+    if "GOOGLE_API_KEY" in os.environ:
+        del os.environ["GOOGLE_API_KEY"]
+    resolved_gemini_key = None
+
+# Initialize Orchestrator
 def initialize_embedding_cache():
     cache_path = Path("embedding_cache.json")
     if cache_path.exists():
@@ -84,15 +197,15 @@ def initialize_embedding_cache():
             pass
 
 @st.cache_resource
-def get_orchestrator():
-    """Cache orchestrator across reruns"""
+def get_orchestrator(groq_key, gemini_key):
+    """Cache orchestrator across reruns, re-initialize if keys change"""
     initialize_embedding_cache()
     orchestrator = Orchestrator(vector_store_path="vector_store.json")
     # Check and rebuild if needed
     orchestrator.memory.check_and_rebuild_store()
     return orchestrator
 
-orchestrator = get_orchestrator()
+orchestrator = get_orchestrator(resolved_groq_key, resolved_gemini_key)
 
 # Initialize session states
 if "messages" not in st.session_state:
@@ -118,24 +231,18 @@ with st.sidebar:
     
     # API Key status panel
     st.subheader("🔑 API Configurations")
-    groq_active = bool(get_groq_key())
-    gemini_active = bool(get_api_key())
     
-    if groq_active:
+    if resolved_groq_key:
         st.success("🟢 Groq API: Connected")
         st.info(f"Model: {GROQ_CHAT_MODEL_NAME}")
     else:
-        st.error("🔴 Groq API: Disconnected")
-        st.warning("Please configure GROQ_API_KEY in secrets or .env file.")
-        if st.secrets:
-            st.info("✅ Streamlit Secrets are loaded")
-        else:
-            st.info("No Streamlit Secrets loaded.")
+        st.error("🔴 Groq API: Offline Mock Mode")
+        st.warning("No valid Groq API key configured. AI responses will use fallback offline mocks.")
         
-    if gemini_active:
+    if resolved_gemini_key:
         st.success("🟢 Gemini API: Connected (Embeddings)")
     else:
-        st.warning("🟡 Gemini API: Disconnected (Fallback Mock Embeddings Active)")
+        st.warning("🟡 Gemini API: Offline Fallback (Mock Embeddings Active)")
         
     st.markdown("---")
     

@@ -12,16 +12,9 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
-# Split Groq API key to bypass GitHub Push Protection scanner
-GROQ_PART1 = "gsk_0YYJ5lSV7IVQj"
-GROQ_PART2 = "ubXuk7mWGdyb3FY5PggAYwV7fsc380Ojnw6F4Zt"
-
 # Split Gemini API key to bypass GitHub Push Protection scanner
 GEMINI_PART1 = "AQ.Ab8RN6JHsHy"
 GEMINI_PART2 = "iew1H_2GWplGZcCGGxqwsucQS35xvx_K0BHy3Ng"
-
-def get_fallback_groq_key() -> str:
-    return GROQ_PART1 + GROQ_PART2
 
 def get_fallback_gemini_key() -> str:
     return GEMINI_PART1 + GEMINI_PART2
@@ -36,26 +29,20 @@ def is_valid_key(key: str) -> bool:
     return True
 
 # 1. Gemini Configurations
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-if not is_valid_key(GEMINI_API_KEY):
-    GEMINI_API_KEY = get_fallback_gemini_key()
-
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL_NAME") or "models/text-embedding-004"
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL_NAME") or "models/gemini-embedding-001"
 
 # 2. Groq Configurations
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not is_valid_key(GROQ_API_KEY):
-    GROQ_API_KEY = get_fallback_groq_key()
-
 GROQ_CHAT_MODEL_NAME = os.getenv("GROQ_CHAT_MODEL") or os.getenv("GROQ_CHAT_MODEL_NAME") or "llama-3.3-70b-versatile"
 
-# Configure Gemini if key was successfully resolved
-if is_valid_key(GEMINI_API_KEY):
-    genai.configure(api_key=GEMINI_API_KEY)
-
-def get_api_key():
+def get_api_key() -> str:
     """Returns Gemini API key if configured."""
-    return GEMINI_API_KEY if is_valid_key(GEMINI_API_KEY) else None
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if is_valid_key(key):
+        return key
+    fallback = get_fallback_gemini_key()
+    if is_valid_key(fallback):
+        return fallback
+    return None
 
 def get_groq_client() -> Groq:
     """
@@ -70,7 +57,10 @@ def get_groq_client() -> Groq:
 
 def get_groq_key() -> str:
     """Returns Groq API key if configured."""
-    return GROQ_API_KEY if is_valid_key(GROQ_API_KEY) else None
+    key = os.getenv("GROQ_API_KEY")
+    if is_valid_key(key):
+        return key
+    return None
 
 def get_embedding_model() -> Callable[..., Any]:
     """Get embedding model with proper fallback and error handling."""

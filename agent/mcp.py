@@ -2,6 +2,7 @@ import os
 import platform
 import psutil
 import datetime
+from pathlib import Path
 from typing import Dict, Any, Callable, List
 from duckduckgo_search import DDGS
 from agent.security import get_workspace_dir, is_safe_path, get_safe_path

@@ -120,7 +120,8 @@ class VectorMemory:
                 response = embed_fn(
                     model=EMBEDDING_MODEL_NAME,
                     content=texts,
-                    task_type="retrieval_document"
+                    task_type="retrieval_document",
+                    output_dimensionality=768
                 )
                 return response['embedding']
             except Exception as e:
@@ -223,7 +224,8 @@ class VectorMemory:
             response = embed_fn(
                 model=EMBEDDING_MODEL_NAME,
                 content=text_clean,
-                task_type="retrieval_document"
+                task_type="retrieval_document",
+                output_dimensionality=768
             )
             val = response['embedding']
             self.embedding_cache[text_clean] = val

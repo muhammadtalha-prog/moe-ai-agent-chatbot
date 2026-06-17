@@ -167,6 +167,14 @@ def test_mcp_registry():
     assert "OS:" in sys_info
     assert "Python Version:" in sys_info
 
+    # Test executing list_directory
+    dir_list = mcp_registry.execute_tool("list_directory", {"relative_path": ""})
+    assert "tests" in dir_list or "main.py" in dir_list
+
+    # Test executing search_files
+    search_res = mcp_registry.execute_tool("search_files", {"pattern": "test_mcp_registry"})
+    assert "test_agent.py" in search_res or "search_files" in search_res
+
 def test_orchestrator_routing():
     # Setup orchestrator (mock db)
     orchestrator = Orchestrator("temp_vector_store.json")
