@@ -405,11 +405,14 @@ with tab2:
         # Set panel choices
         action = st.radio(
             "Select action to perform:",
-            ["Read & Preview", "Summarize Content", "Rewrite/Modify Content"]
+            ["Read & Preview", "Summarize Content", "Rewrite/Modify Content", "Advanced Analysis", "Compare Files"]
         )
         
         instruction = ""
         output_filename = ""
+        compare_file = None
+        target_compare_path = None
+        
         if action == "Rewrite/Modify Content":
             instruction = st.text_input(
                 "Rewrite instructions:", 
@@ -423,6 +426,23 @@ with tab2:
                 "Summarization focus (optional):", 
                 placeholder="Example: 'summarize in 3 core bullet points focused on math'"
             )
+            
+        elif action == "Compare Files":
+            compare_file = st.file_uploader(
+                "Choose second file to compare with",
+                key="compare_file_uploader"
+            )
+            if compare_file is not None:
+                try:
+                    from agent.security import validate_and_secure_file
+                    compare_filename, compare_bytes = validate_and_secure_file(compare_file)
+                    workspace = get_workspace_dir()
+                    target_compare_path = get_safe_path(temp_dir / compare_filename, workspace)
+                    with open(target_compare_path, "wb") as f:
+                        f.write(compare_bytes)
+                    st.success(f"Uploaded second file: `{compare_filename}`")
+                except Exception as e:
+                    st.error(f"Second file validation error: {e}")
 
         if st.button("🔥 Execute File Action", type="primary"):
             with st.spinner("Processing file..."):
@@ -435,6 +455,14 @@ with tab2:
                         action_param = "read"
                     elif action == "Summarize Content":
                         action_param = "summarize"
+                    elif action == "Advanced Analysis":
+                        action_param = "analyze"
+                    elif action == "Compare Files":
+                        action_param = "compare"
+                        if compare_file is None or target_compare_path is None:
+                            st.error("Please upload the second file to compare.")
+                            st.stop()
+                        out_path = str(target_compare_path)
                     else:
                         action_param = "rewrite"
                         out_path = str(temp_dir / output_filename)

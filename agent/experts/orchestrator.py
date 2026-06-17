@@ -31,8 +31,8 @@ class Orchestrator:
     @property
     def file_expert(self) -> Any:
         if self._file_expert is None:
-            from agent.experts.file_expert import FileExpert
-            self._file_expert = FileExpert()
+            from agent.experts.file_expert_v2 import FileExpertV2
+            self._file_expert = FileExpertV2()
         return self._file_expert
 
     @property
@@ -170,6 +170,8 @@ class Orchestrator:
                 output_path = subparts[0]
                 content = parts[2]
                 return {"expert": "file", "action": "generate", "output_path": output_path, "instruction": content}
+            elif cmd == '/analyze' and len(parts) > 1:
+                return {"expert": "file", "action": "analyze", "file_path": parts[1]}
             elif cmd == '/remember' and len(parts) > 1:
                 text_to_remember = input_stripped.split(maxsplit=1)[1]
                 return {"expert": "memory", "action": "remember", "text_to_remember": text_to_remember}
@@ -195,15 +197,28 @@ class Orchestrator:
         # File operations
         file_patterns = [
             r"(?:read|view|open|show|cat)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)",
-            r"(?:summarize|summary|sum\s+up)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)"
+            r"(?:summarize|summary|sum\s+up)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)",
+            r"(?:analyze|analysis|audit)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)"
         ]
         
         for pattern in file_patterns:
             match = re.search(pattern, user_input, re.IGNORECASE)
             if match:
                 file_path = match.group(1)
-                action = "summarize" if "summarize" in user_input.lower() or "summary" in user_input.lower() else "read"
+                if any(w in user_input.lower() for w in ["analyze", "analysis", "audit"]):
+                    action = "analyze"
+                elif any(w in user_input.lower() for w in ["summarize", "summary", "sum up"]):
+                    action = "summarize"
+                else:
+                    action = "read"
                 return {"expert": "file", "action": action, "file_path": file_path}
+
+        # Compare operations
+        compare_match = re.search(r"(?:compare|diff)\s+(?:the\s+)?(?:files?\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)\s+(?:and|with)\s+([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)", user_input, re.IGNORECASE)
+        if compare_match:
+            file_path = compare_match.group(1)
+            output_path = compare_match.group(2)
+            return {"expert": "file", "action": "compare", "file_path": file_path, "output_path": output_path}
 
         # Rewrite operations
         rewrite_match = re.search(r"(?:rewrite|modify|edit)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+)(?:\s+(?:and\s+save\s+to|to)\s+([a-zA-Z0-9_\-\./]+\.[a-zA-Z0-9]+))?", user_input, re.IGNORECASE)
