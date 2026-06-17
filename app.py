@@ -402,70 +402,61 @@ with tab2:
             st.error(f"File validation error: {e}")
             
     if uploaded_file is not None and validated_file:
-        # Set panel choices
-        action = st.radio(
-            "Select action to perform:",
-            ["Read & Preview", "Summarize Content", "Rewrite/Modify Content", "Advanced Analysis", "Compare Files"]
+        # Description section (prompt input)
+        instruction = st.text_area(
+            "What would you like to do with this file?",
+            placeholder="e.g. 'summarize this document', 'analyze readability and sentiment', 'translate to Spanish', 'rewrite to add comments'",
+            help="Describe your request. The system will automatically determine the best action (Read, Summarize, Rewrite, Analyze, or Compare) based on your description."
         )
         
-        instruction = ""
-        output_filename = ""
-        compare_file = None
+        # Optional second file uploader for comparison
+        compare_file = st.file_uploader(
+            "Upload a second file (Optional - for comparison requests)",
+            key="compare_file_uploader"
+        )
         target_compare_path = None
-        
-        if action == "Rewrite/Modify Content":
-            instruction = st.text_input(
-                "Rewrite instructions:", 
-                placeholder="Example: 'translate this file content to French' or 'sanitize raw values'"
-            )
-            base, ext = os.path.splitext(filename)
-            output_filename = st.text_input("Saved Output Filename:", value=f"{base}_modified{ext}")
-            
-        elif action == "Summarize Content":
-            instruction = st.text_input(
-                "Summarization focus (optional):", 
-                placeholder="Example: 'summarize in 3 core bullet points focused on math'"
-            )
-            
-        elif action == "Compare Files":
-            compare_file = st.file_uploader(
-                "Choose second file to compare with",
-                key="compare_file_uploader"
-            )
-            if compare_file is not None:
-                try:
-                    from agent.security import validate_and_secure_file
-                    compare_filename, compare_bytes = validate_and_secure_file(compare_file)
-                    workspace = get_workspace_dir()
-                    target_compare_path = get_safe_path(temp_dir / compare_filename, workspace)
-                    with open(target_compare_path, "wb") as f:
-                        f.write(compare_bytes)
-                    st.success(f"Uploaded second file: `{compare_filename}`")
-                except Exception as e:
-                    st.error(f"Second file validation error: {e}")
+        if compare_file is not None:
+            try:
+                from agent.security import validate_and_secure_file
+                compare_filename, compare_bytes = validate_and_secure_file(compare_file)
+                workspace = get_workspace_dir()
+                target_compare_path = get_safe_path(temp_dir / compare_filename, workspace)
+                with open(target_compare_path, "wb") as f:
+                    f.write(compare_bytes)
+                st.success(f"Uploaded second file: `{compare_filename}`")
+            except Exception as e:
+                st.error(f"Second file validation error: {e}")
 
         if st.button("🔥 Execute File Action", type="primary"):
             with st.spinner("Processing file..."):
                 try:
-                    # Translate selection to orchestrator action parameters
+                    # Automatically classify user intent/action based on instruction and uploads
+                    instr_lower = instruction.lower().strip()
                     action_param = ""
                     out_path = None
+                    output_filename = ""
                     
-                    if action == "Read & Preview":
-                        action_param = "read"
-                    elif action == "Summarize Content":
-                        action_param = "summarize"
-                    elif action == "Advanced Analysis":
-                        action_param = "analyze"
-                    elif action == "Compare Files":
+                    if not instr_lower:
+                        if compare_file is not None and target_compare_path is not None:
+                            action_param = "compare"
+                            out_path = str(target_compare_path)
+                        else:
+                            action_param = "read"
+                    elif any(w in instr_lower for w in ["compare", "diff"]) or compare_file is not None:
                         action_param = "compare"
                         if compare_file is None or target_compare_path is None:
-                            st.error("Please upload the second file to compare.")
+                            st.error("Please upload a second file to perform the comparison.")
                             st.stop()
                         out_path = str(target_compare_path)
-                    else:
+                    elif any(w in instr_lower for w in ["analyze", "analysis", "audit", "entity", "entities", "sentiment", "readability"]):
+                        action_param = "analyze"
+                    elif any(w in instr_lower for w in ["rewrite", "modify", "edit", "change", "translate", "refactor", "update", "format", "add", "remove", "replace", "convert"]):
                         action_param = "rewrite"
+                        base, ext = os.path.splitext(filename)
+                        output_filename = f"{base}_modified{ext}"
                         out_path = str(temp_dir / output_filename)
+                    else:
+                        action_param = "summarize"
                         
                     response = orchestrator.file_expert.respond(
                         user_input=instruction,
@@ -482,12 +473,12 @@ with tab2:
                     st.markdown(response)
                     
                     # If rewritten, provide download link
-                    if action_param == "rewrite" and os.path.exists(out_path):
+                    if action_param == "rewrite" and out_path and os.path.exists(out_path):
                         with open(out_path, "rb") as out_file:
                             st.download_button(
                                 label="📥 Download Rewritten File",
                                 data=out_file.read(),
-                                file_name=output_filename,
+                                file_name=output_filename or f"modified_{filename}",
                                 mime="application/octet-stream",
                                 use_container_width=True
                             )
