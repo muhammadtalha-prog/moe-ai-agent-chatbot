@@ -108,7 +108,9 @@ st.markdown("""
 def validate_groq_key(key: str) -> bool:
     if not key:
         return False
-    cache_key = f"val_groq_{key}"
+    import hashlib
+    hashed_key = hashlib.md5(key.encode('utf-8')).hexdigest()
+    cache_key = f"val_groq_{hashed_key}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
     try:
@@ -124,7 +126,9 @@ def validate_groq_key(key: str) -> bool:
 def validate_gemini_key(key: str) -> bool:
     if not key:
         return False
-    cache_key = f"val_gemini_{key}"
+    import hashlib
+    hashed_key = hashlib.md5(key.encode('utf-8')).hexdigest()
+    cache_key = f"val_gemini_{hashed_key}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
     try:
