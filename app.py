@@ -321,7 +321,70 @@ with st.sidebar:
         st.json(health)
 
     st.markdown("---")
-    st.markdown("Created by Antigravity AI Agent Chatbot.")
+    import streamlit.components.v1 as components
+    components.html("""
+    <div class="scene">
+      <div class="cube">
+        <div class="face front">MoE</div>
+        <div class="face back">Memory</div>
+        <div class="face right">AI</div>
+        <div class="face left">Chat</div>
+        <div class="face top">Tools</div>
+        <div class="face bottom">Expert</div>
+      </div>
+    </div>
+    <style>
+    body {
+      margin: 0;
+      background: transparent;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      height: 100vh;
+    }
+    .scene {
+      width: 90px;
+      height: 90px;
+      perspective: 300px;
+    }
+    .cube {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      animation: spin 10s infinite linear;
+    }
+    .face {
+      position: absolute;
+      width: 90px;
+      height: 90px;
+      line-height: 90px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #60a5fa;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.95);
+      border: 2px solid #3b82f6;
+      border-radius: 6px;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+      font-family: 'Inter', -apple-system, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .front  { transform: rotateY(  0deg) translateZ(45px); }
+    .back   { transform: rotateY(180deg) translateZ(45px); }
+    .right  { transform: rotateY( 90deg) translateZ(45px); }
+    .left   { transform: rotateY(-90deg) translateZ(45px); }
+    .top    { transform: rotateX( 90deg) translateZ(45px); }
+    .bottom { transform: rotateX(-90deg) translateZ(45px); }
+    
+    @keyframes spin {
+      0% { transform: rotateX(0deg) rotateY(0deg); }
+      100% { transform: rotateX(360deg) rotateY(360deg); }
+    }
+    </style>
+    """, height=140)
 
 # --- MAIN LAYOUT TABBING ---
 tab1, tab2 = st.tabs(["💬 Chatbot Room", "📁 File Actions Panel"])

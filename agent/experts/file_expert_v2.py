@@ -44,19 +44,35 @@ class FileExpertV2:
         meta = result["metadata"]
         content = result["content"]["raw"]
         
-        return f"""### 📄 File Read Success
-
-**File:** `{meta['filename']}`
-**Type:** `{meta['type']}`
-**Size:** `{meta['size_readable']}`
-**Lines:** {meta['line_count']}
-**Words:** {meta['word_count']}
-
-### Content Preview:
-```
-{content[:2000]}
-```
-{'... (truncated)' if len(content) > 2000 else ''}
+        # Determine how to display content preview
+        if meta['type'] == 'code':
+            # Detect language
+            ext = meta.get('extension', '').lower()
+            lang_map = {
+                '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+                '.java': 'java', '.cpp': 'cpp', '.c': 'c', '.go': 'go',
+                '.rs': 'rust', '.sql': 'sql', '.sh': 'bash', '.html': 'html',
+                '.css': 'css', '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml',
+                '.xml': 'xml', '.md': 'markdown'
+            }
+            lang = lang_map.get(ext, '')
+            preview = f"```{lang}\n{content[:3000]}\n```"
+        else:
+            # Styled scrollable document container
+            preview = f"""<div style="background-color: #0F172A; border-radius: 8px; padding: 20px; border: 1px solid #1E293B; font-family: 'Inter', -apple-system, sans-serif; line-height: 1.6; color: #E2E8F0; max-height: 480px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">{content[:3000]}</div>"""
+            
+        truncated_msg = ""
+        if len(content) > 3000:
+            truncated_msg = f"\n\n*Note: Content was truncated for preview. Total size: {meta['size_readable']} ({len(content)} characters).*"
+            
+        return f"""### 📄 File Reader View
+ 
+**File Name:** `{meta['filename']}`
+**Format Type:** `{meta['type'].upper()}`
+**Total Size:** `{meta['size_readable']}` | **Lines:** `{meta['line_count']}` | **Words:** `{meta['word_count']}`
+ 
+### Document Content:
+{preview}{truncated_msg}
 """
 
     def _handle_summarize(self, file_path: str, instruction: str) -> str:
