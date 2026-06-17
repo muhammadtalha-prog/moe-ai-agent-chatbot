@@ -2,10 +2,55 @@ import os
 import platform
 import psutil
 import datetime
+import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, Any, Callable, List
 from duckduckgo_search import DDGS
 from agent.security import get_workspace_dir, is_safe_path, get_safe_path
+
+class HTMLTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.result = []
+        self.ignore = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ['script', 'style', 'head', 'nav', 'footer', 'header']:
+            self.ignore = True
+
+    def handle_endtag(self, tag):
+        if tag in ['script', 'style', 'head', 'nav', 'footer', 'header']:
+            self.ignore = False
+
+    def handle_data(self, data):
+        if not self.ignore:
+            text = data.strip()
+            if text:
+                self.result.append(text)
+
+    def get_text(self):
+        # Join text content cleanly with single space
+        return " ".join(self.result)
+
+def fetch_url_text(url: str) -> str:
+    """Fetches text content of a URL dynamically using urllib and standard headers."""
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=6) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+            parser = HTMLTextExtractor()
+            parser.feed(html)
+            text = parser.get_text()
+            # Collapse duplicate spaces
+            text = " ".join(text.split())
+            # Cap at 3000 chars to fit context window
+            return text[:3000]
+    except Exception as e:
+        return f"[Error fetching page content: {e}]"
 
 class MCPRegistry:
     def __init__(self):
@@ -49,7 +94,7 @@ mcp_registry = MCPRegistry()
 
 @mcp_registry.register_tool(
     name="web_search",
-    description="Performs a web search to fetch the latest information on a given topic.",
+    description="Performs a web search and retrieves both search result snippets and full webpage body text to answer queries with comprehensive details.",
     parameters={
         "type": "object",
         "properties": {
@@ -62,12 +107,29 @@ mcp_registry = MCPRegistry()
     }
 )
 def web_search(query: str) -> str:
-    """Executes a search query using DuckDuckGo."""
+    """Executes a search query, gets top results, and crawls their actual webpage texts."""
     try:
         results_list = []
         with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=5):
-                results_list.append(f"Title: {r.get('title')}\nURL: {r.get('href')}\nSnippet: {r.get('body')}\n")
+            # Fetch top 3 results
+            search_results = list(ddgs.text(query, max_results=3))
+            
+            for idx, r in enumerate(search_results, 1):
+                title = r.get('title')
+                url = r.get('href')
+                snippet = r.get('body')
+                
+                # Dynamic page fetch
+                page_text = fetch_url_text(url)
+                
+                result_item = (
+                    f"Result #{idx}:\n"
+                    f"Title: {title}\n"
+                    f"URL: {url}\n"
+                    f"Snippet: {snippet}\n"
+                    f"Full Webpage Text Content:\n{page_text}\n"
+                )
+                results_list.append(result_item)
         
         if not results_list:
             return "No web results found."
