@@ -319,6 +319,11 @@ class VectorMemory:
         
         results = []
         for doc in self.documents:
+            # Skip legacy error records to avoid context pollution
+            text_lower = doc["text"].lower()
+            if "chatexpert error" in text_lower or "error code: 401" in text_lower or "invalid_api_key" in text_lower or "fileexpert error" in text_lower:
+                continue
+                
             d_vec = np.array(doc["embedding"])
             # Compute Cosine Similarity
             dot_product = np.dot(q_vec, d_vec)

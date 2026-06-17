@@ -117,10 +117,13 @@ class Orchestrator:
             
         # Add conversation turn to vector store for retrieval later
         if not user_input.startswith('/') and len(user_input.strip()) > 5:
-            self.memory.add_text(
-                text=f"User asked: {user_input}\nAgent answered: {response[:300]}...",
-                metadata={"source": "history", "input": user_input[:100]}
-            )
+            # Only save response if it does not contain error signatures
+            resp_lower = response.lower()
+            if "error code:" not in resp_lower and "chatexpert error" not in resp_lower and "invalid_api_key" not in resp_lower and "fileexpert error" not in resp_lower:
+                self.memory.add_text(
+                    text=f"User asked: {user_input}\nAgent answered: {response[:300]}...",
+                    metadata={"source": "history", "input": user_input[:100]}
+                )
             
         return response
 
