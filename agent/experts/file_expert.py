@@ -21,21 +21,21 @@ class FileExpert(BaseExpert):
         output_path = kwargs.get("output_path")
         instruction = kwargs.get("instruction") or user_input
         
-        if not file_path:
+        if not file_path and action != 'generate':
             return "FileExpert Error: No file path was specified."
 
         try:
-            # 1. Read file
-            content = read_file(file_path)
-            
-            # Save file snippet in vector store for future recall
-            filename = os.path.basename(file_path)
-            memory.add_text(
-                text=f"Content of file {filename}:\n{content[:1500]}", 
-                metadata={"source": "file_read", "filename": filename, "path": file_path}
-            )
+            # 1. Read file if not generating
+            if action != 'generate':
+                content = read_file(file_path)
+                filename = os.path.basename(file_path)
             
             if action == 'read':
+                # Save file snippet in vector store for future recall
+                memory.add_text(
+                    text=f"Content of file {filename}:\n{content[:1500]}", 
+                    metadata={"source": "file_read", "filename": filename, "path": file_path}
+                )
                 return f"Successfully read file `{filename}`. Content preview:\n\n{content}"
                 
             elif action == 'summarize':
@@ -47,7 +47,7 @@ class FileExpert(BaseExpert):
                 )
                 return f"### Summary of `{filename}`:\n\n{summary}"
                 
-            elif action == 'rewrite':
+            elif action == 'rewrite' or action == 'modify':
                 if not output_path:
                     # Default to overwriting or a suffix
                     base, ext = os.path.splitext(file_path)
@@ -64,6 +64,38 @@ class FileExpert(BaseExpert):
                 
                 return f"Successfully processed and rewrote file `{filename}`.\nSaved to: `{output_path}`\n\nPreview of rewritten content:\n\n{rewritten_content[:1000]}"
             
+            elif action == 'compare':
+                if not output_path:
+                    return "FileExpert Error: Please specify the second file path using the output_path parameter."
+                content2 = read_file(output_path)
+                lines1 = content.split('\n')
+                lines2 = content2.split('\n')
+                common_lines = len(set(lines1) & set(lines2)) if lines1 and lines2 else 0
+                return f"""### 🔍 File Comparison
+
+**File 1:** `{filename}`
+**File 2:** `{os.path.basename(output_path)}`
+
+- **Size Difference:** {len(content) - len(content2)} characters
+- **Line Count Difference:** {len(lines1) - len(lines2)} lines
+- **Common Lines:** {common_lines} lines
+"""
+
+            elif action == 'generate':
+                if not output_path:
+                    return "FileExpert Error: Please specify the target output file path using the output_path parameter."
+                write_file(output_path, instruction)
+                return f"""### 📝 File Generated Successfully
+
+**File:** `{os.path.basename(output_path)}`
+**Size:** {len(instruction)} bytes
+
+### Preview:
+```
+{instruction[:500]}
+```
+"""
+
             else:
                 return f"FileExpert: Unknown action '{action}'."
                 

@@ -158,6 +158,18 @@ class Orchestrator:
                     out_path = None
                     inst = rest
                 return {"expert": "file", "action": "rewrite", "file_path": file_path, "output_path": out_path, "instruction": inst}
+            elif cmd == '/compare' and len(parts) > 2:
+                # Format: /compare file1 file2
+                subparts = parts[1].split(maxsplit=1)
+                file_path = subparts[0]
+                output_path = parts[2]
+                return {"expert": "file", "action": "compare", "file_path": file_path, "output_path": output_path}
+            elif cmd == '/generate' and len(parts) > 2:
+                # Format: /generate file_path content
+                subparts = parts[1].split(maxsplit=1)
+                output_path = subparts[0]
+                content = parts[2]
+                return {"expert": "file", "action": "generate", "output_path": output_path, "instruction": content}
             elif cmd == '/remember' and len(parts) > 1:
                 text_to_remember = input_stripped.split(maxsplit=1)[1]
                 return {"expert": "memory", "action": "remember", "text_to_remember": text_to_remember}
@@ -170,6 +182,15 @@ class Orchestrator:
             elif cmd == '/sys':
                 return {"expert": "mcp", "tool_name": "get_system_info", "tool_arguments": {}}
                 
+        # Check if query requires latest updates/information automatically
+        update_keywords = [
+            "latest", "update", "recent", "current", 
+            "today", "now", "2026", "news", "trending",
+            "what's new", "recently", "just released"
+        ]
+        if not input_stripped.startswith('/') and any(kw in user_input.lower() for kw in update_keywords):
+            return {"expert": "mcp", "tool_name": "web_search", "tool_arguments": {"query": user_input}}
+
         # Heuristics based on keyword searches in query
         # File operations
         file_patterns = [
