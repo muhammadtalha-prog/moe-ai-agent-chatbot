@@ -2,7 +2,8 @@ import os
 import json
 import uuid
 import numpy as np
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import List, Dict, Any, Tuple
 from agent.config import EMBEDDING_MODEL_NAME, get_api_key
 import logging
@@ -115,15 +116,14 @@ class VectorMemory:
         """Batch embed texts using the embedding API or fallback to individual."""
         if get_api_key():
             try:
-                from agent.config import get_embedding_model
-                embed_fn = get_embedding_model()
-                response = embed_fn(
+                from agent.config import get_genai_client
+                client = get_genai_client()
+                response = client.models.embed_content(
                     model=EMBEDDING_MODEL_NAME,
-                    content=texts,
-                    task_type="retrieval_document",
-                    output_dimensionality=768
+                    contents=texts,
+                    config=types.EmbedContentConfig(output_dimensionality=768)
                 )
-                return response['embedding']
+                return [emb.values for emb in response.embeddings]
             except Exception as e:
                 logger.error(f"Batch embedding failed: {e}. Falling back to individual.")
                 return [self._get_embedding(t) for t in texts]
@@ -219,15 +219,14 @@ class VectorMemory:
             return val
 
         try:
-            from agent.config import get_embedding_model
-            embed_fn = get_embedding_model()
-            response = embed_fn(
+            from agent.config import get_genai_client
+            client = get_genai_client()
+            response = client.models.embed_content(
                 model=EMBEDDING_MODEL_NAME,
-                content=text_clean,
-                task_type="retrieval_document",
-                output_dimensionality=768
+                contents=text_clean,
+                config=types.EmbedContentConfig(output_dimensionality=768)
             )
-            val = response['embedding']
+            val = response.embeddings[0].values
             self.embedding_cache[text_clean] = val
             self.save_cache()
             return val
@@ -272,15 +271,15 @@ class VectorMemory:
         embeddings = []
         if get_api_key():
             try:
-                from agent.config import get_embedding_model
-                embed_fn = get_embedding_model()
+                from agent.config import get_genai_client
+                client = get_genai_client()
                 # Try batching via api if supported, otherwise loop with _get_embedding which has cache checks
-                response = embed_fn(
+                response = client.models.embed_content(
                     model=EMBEDDING_MODEL_NAME,
-                    content=texts,
-                    task_type="retrieval_document"
+                    contents=texts,
+                    config=types.EmbedContentConfig(output_dimensionality=768)
                 )
-                embeddings = response['embedding']
+                embeddings = [emb.values for emb in response.embeddings]
                 for txt, emb in zip(texts, embeddings):
                     self.embedding_cache[str(txt).strip()] = emb
                 self.save_cache()

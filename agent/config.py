@@ -1,5 +1,6 @@
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from groq import Groq
 import time
@@ -26,7 +27,7 @@ def is_valid_key(key: str) -> bool:
     return True
 
 # 1. Gemini Configurations
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL_NAME") or "models/gemini-embedding-001"
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL_NAME") or "text-embedding-004"
 
 # 2. Groq Configurations
 GROQ_CHAT_MODEL_NAME = os.getenv("GROQ_CHAT_MODEL") or os.getenv("GROQ_CHAT_MODEL_NAME") or "llama-3.3-70b-versatile"
@@ -56,8 +57,8 @@ def get_groq_key() -> str:
         return key
     return None
 
-def get_embedding_model() -> Callable[..., Any]:
-    """Get embedding model with proper fallback and error handling."""
+def get_genai_client() -> genai.Client:
+    """Get Gemini client with proper error handling."""
     gemini_key = get_api_key()
     if not gemini_key:
         raise ValueError(
@@ -65,10 +66,9 @@ def get_embedding_model() -> Callable[..., Any]:
             "Please set it in .env or Streamlit secrets."
         )
     try:
-        genai.configure(api_key=gemini_key)
-        return genai.embed_content
+        return genai.Client(api_key=gemini_key)
     except Exception as e:
-        raise RuntimeError(f"Failed to initialize Gemini embeddings: {e}")
+        raise RuntimeError(f"Failed to initialize Gemini client: {e}")
 
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0) -> Callable[..., Any]:
     """Decorator to retry failed API calls with exponential backoff."""

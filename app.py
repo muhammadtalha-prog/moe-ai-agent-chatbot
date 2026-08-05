@@ -132,9 +132,9 @@ def validate_gemini_key(key: str) -> bool:
     if cache_key in st.session_state:
         return st.session_state[cache_key]
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=key)
-        genai.list_models()
+        from google import genai
+        client = genai.Client(api_key=key)
+        list(client.models.list(config={"page_size": 1}))
         st.session_state[cache_key] = True
         return True
     except Exception:
