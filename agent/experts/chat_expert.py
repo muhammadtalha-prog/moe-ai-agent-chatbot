@@ -52,4 +52,6 @@ class ChatExpert(BaseExpert):
             )
             return chat_completion.choices[0].message.content
         except Exception as e:
-            return f"ChatExpert Error: {str(e)}"
+            from agent.security import SafeLogger
+            SafeLogger.log_error(e, "ChatExpert error")
+            return "ChatExpert: An error occurred while generating a response. Please check your API key configuration."

@@ -3,6 +3,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from groq import Groq
 import time
+import threading
 from functools import wraps
 from typing import Callable, Any
 from collections import deque
@@ -12,12 +13,8 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
-# Split Gemini API key to bypass GitHub Push Protection scanner
-GEMINI_PART1 = "AQ.Ab8RN6JHsHy"
-GEMINI_PART2 = "iew1H_2GWplGZcCGGxqwsucQS35xvx_K0BHy3Ng"
-
-def get_fallback_gemini_key() -> str:
-    return GEMINI_PART1 + GEMINI_PART2
+# SECURITY: API keys must be provided via .env or Streamlit secrets.
+# Never hardcode API keys in source code.
 
 def is_valid_key(key: str) -> bool:
     """Helper to verify if a key is a real key or just a placeholder."""
@@ -35,13 +32,10 @@ EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODE
 GROQ_CHAT_MODEL_NAME = os.getenv("GROQ_CHAT_MODEL") or os.getenv("GROQ_CHAT_MODEL_NAME") or "llama-3.3-70b-versatile"
 
 def get_api_key() -> str:
-    """Returns Gemini API key if configured."""
+    """Returns Gemini API key if configured via environment variables."""
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if is_valid_key(key):
         return key
-    fallback = get_fallback_gemini_key()
-    if is_valid_key(fallback):
-        return fallback
     return None
 
 def get_groq_client() -> Groq:
@@ -99,16 +93,18 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0, backoff: float = 
     return decorator
 
 def rate_limit(calls_per_minute: int = 60) -> Callable[..., Any]:
-    """Rate limit decorator for API calls."""
+    """Thread-safe rate limit decorator for API calls."""
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         last_called = [0.0]
+        lock = threading.Lock()
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            elapsed = time.time() - last_called[0]
-            min_interval = 60.0 / calls_per_minute
-            if elapsed < min_interval:
-                time.sleep(min_interval - elapsed)
-            last_called[0] = time.time()
+            with lock:
+                elapsed = time.time() - last_called[0]
+                min_interval = 60.0 / calls_per_minute
+                if elapsed < min_interval:
+                    time.sleep(min_interval - elapsed)
+                last_called[0] = time.time()
             return func(*args, **kwargs)
         return wrapper
     return decorator

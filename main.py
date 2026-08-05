@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 from dotenv import load_dotenv
 from typing import List, Dict
 
@@ -117,7 +118,7 @@ def main():
                 break
                 
             elif user_input.lower() == '/clear':
-                os.system('cls' if os.name == 'nt' else 'clear')
+                subprocess.run(['cls' if os.name == 'nt' else 'clear'], shell=(os.name == 'nt'), check=False)
                 session_history.clear()
                 console.print("[success]Screen cleared and session history reset.[/success]")
                 continue
@@ -153,6 +154,12 @@ def main():
                 console.print("[success]Vector database cleared successfully.[/success]")
                 continue
             
+            # Sanitize user input before processing
+            from agent.security import sanitize_user_input
+            user_input = sanitize_user_input(user_input)
+            if not user_input:
+                continue
+
             # Append user message to local history
             session_history.append({"role": "user", "content": user_input})
             

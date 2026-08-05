@@ -136,7 +136,7 @@ class FileProcessor:
         """Process plain text files"""
         try:
             return path.read_text(encoding='utf-8', errors='ignore')
-        except:
+        except Exception:
             return path.read_text(encoding='latin-1', errors='ignore')
     
     def _process_pdf(self, path: Path, options: Dict) -> str:
@@ -616,12 +616,12 @@ class FileProcessor:
     
     def _calculate_hash(self, path: Path) -> str:
         try:
-            hasher = hashlib.md5()
+            hasher = hashlib.sha256()
             with open(path, 'rb') as f:
                 for chunk in iter(lambda: f.read(4096), b''):
                     hasher.update(chunk)
             return hasher.hexdigest()
-        except:
+        except Exception:
             return ""
     
     def _detect_encoding(self, path: Path) -> str:
@@ -631,27 +631,27 @@ class FileProcessor:
                 raw = f.read(1024)
                 result = chardet.detect(raw)
                 return result.get('encoding', 'utf-8')
-        except:
+        except Exception:
             return "utf-8"
     
     def _count_lines(self, path: Path) -> int:
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 return sum(1 for _ in f)
-        except:
+        except Exception:
             return 0
     
     def _count_words(self, path: Path) -> int:
         try:
             content = path.read_text(encoding='utf-8', errors='ignore')
             return len(re.findall(r'\w+', content))
-        except:
+        except Exception:
             return 0
     
     def _count_characters(self, path: Path) -> int:
         try:
             return path.stat().st_size
-        except:
+        except Exception:
             return 0
     
     def _clean_content(self, content: str) -> str:

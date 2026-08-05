@@ -1,4 +1,5 @@
 import os
+import html as html_module
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from agent.file_processor import FileProcessor
@@ -37,7 +38,9 @@ class FileExpertV2:
             else:
                 return f"FileExpert: Unknown action '{action}'."
         except Exception as e:
-            return f"FileExpert Error: {str(e)}"
+            from agent.security import SafeLogger
+            SafeLogger.log_error(e, "FileExpertV2 error")
+            return "FileExpert: An error occurred while processing the file. Please verify the file path and try again."
             
     def _handle_read(self, file_path: str) -> str:
         result = self.processor.process_file(file_path)
@@ -59,7 +62,7 @@ class FileExpertV2:
             preview = f"```{lang}\n{content[:3000]}\n```"
         else:
             # Styled scrollable document container
-            preview = f"""<div style="background-color: #0F172A; border-radius: 8px; padding: 20px; border: 1px solid #1E293B; font-family: 'Inter', -apple-system, sans-serif; line-height: 1.6; color: #E2E8F0; max-height: 480px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">{content[:3000]}</div>"""
+            preview = f"""<div style="background-color: #0F172A; border-radius: 8px; padding: 20px; border: 1px solid #1E293B; font-family: 'Inter', -apple-system, sans-serif; line-height: 1.6; color: #E2E8F0; max-height: 480px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">{html_module.escape(content[:3000])}</div>"""
             
         truncated_msg = ""
         if len(content) > 3000:
@@ -97,7 +100,7 @@ class FileExpertV2:
                     temperature=0.3
                 )
                 summary = completion.choices[0].message.content
-            except:
+            except Exception:
                 pass
                 
         return f"""### 📊 File Summary
@@ -147,7 +150,7 @@ class FileExpertV2:
                     if lines and lines[-1].startswith("```"):
                         lines = lines[:-1]
                     rewritten = "\n".join(lines).strip()
-            except:
+            except Exception:
                 pass
                 
         write_file(output_path, rewritten)

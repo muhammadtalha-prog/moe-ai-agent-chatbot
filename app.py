@@ -109,7 +109,7 @@ def validate_groq_key(key: str) -> bool:
     if not key:
         return False
     import hashlib
-    hashed_key = hashlib.md5(key.encode('utf-8')).hexdigest()
+    hashed_key = hashlib.sha256(key.encode('utf-8')).hexdigest()
     cache_key = f"val_groq_{hashed_key}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
@@ -127,7 +127,7 @@ def validate_gemini_key(key: str) -> bool:
     if not key:
         return False
     import hashlib
-    hashed_key = hashlib.md5(key.encode('utf-8')).hexdigest()
+    hashed_key = hashlib.sha256(key.encode('utf-8')).hexdigest()
     cache_key = f"val_gemini_{hashed_key}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
@@ -427,7 +427,7 @@ with tab1:
                 except Exception as e:
                     from agent.security import SafeLogger
                     SafeLogger.log_error(e, "Error executing chat query")
-                    st.error(f"Error executing chat: {e}")
+                    st.error("An error occurred while processing your request. Please check your API key configuration and try again.")
 
 # Tab 2: File upload processing
 with tab2:
@@ -439,6 +439,8 @@ with tab2:
     )
     
     validated_file = False
+    temp_dir = None
+    target_path = None
     if uploaded_file is not None:
         try:
             from agent.security import validate_and_secure_file
@@ -462,7 +464,7 @@ with tab2:
         except Exception as e:
             from agent.security import SafeLogger
             SafeLogger.log_error(e, "File upload security validation failed")
-            st.error(f"File validation error: {e}")
+            st.error("File validation failed. Please ensure the file type is supported and the file is not too large (max 10MB).")
             
     if uploaded_file is not None and validated_file:
         # Description section (prompt input)
@@ -488,7 +490,9 @@ with tab2:
                     f.write(compare_bytes)
                 st.success(f"Uploaded second file: `{compare_filename}`")
             except Exception as e:
-                st.error(f"Second file validation error: {e}")
+                from agent.security import SafeLogger
+                SafeLogger.log_error(e, "Second file validation failed")
+                st.error("Second file validation failed. Please check the file type and size.")
 
         if st.button("🔥 Execute File Action", type="primary"):
             with st.spinner("Processing file..."):
@@ -546,4 +550,6 @@ with tab2:
                                 use_container_width=True
                             )
                 except Exception as e:
-                    st.error(f"Failed to process file task: {e}")
+                    from agent.security import SafeLogger
+                    SafeLogger.log_error(e, "File processing task failed")
+                    st.error("Failed to process the file task. Please check your input and try again.")

@@ -100,7 +100,9 @@ class FileExpert(BaseExpert):
                 return f"FileExpert: Unknown action '{action}'."
                 
         except Exception as e:
-            return f"FileExpert Error: {str(e)}"
+            from agent.security import SafeLogger
+            SafeLogger.log_error(e, "FileExpert error")
+            return "FileExpert: An error occurred while processing the file. Please verify the file path and try again."
 
     def summarize_content(self, content: str, filename: str, instruction: str) -> str:
         """Summarizes the file content via Groq API."""
